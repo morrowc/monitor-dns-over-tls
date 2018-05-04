@@ -1,22 +1,29 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"net"
-	"crypto/tls"
-	"github.com/miekg/dns"
 	"os"
+
+	"github.com/miekg/dns"
+)
+
+var (
+	// Set flags used in the program.
+	help     = flag.Bool("h", false, "Print help")
+	insecure = flag.Bool("k", false, "Do not check the certificate")
 )
 
 func main() {
+	flag.Parse()
+
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] NAMESERVER-IP ZONE\n", os.Args[0])
 		flag.PrintDefaults()
 	}
-	help := flag.Bool("h", false, "Print help")
-	insecure := flag.Bool("k", false, "Do not check the certificate")
-	flag.Parse()
+	// Validate flag values.
 	if *help {
 		flag.Usage()
 		os.Exit(0)
@@ -25,19 +32,27 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
+
 	ns := flag.Arg(0)
 	zone := dns.Fqdn(flag.Arg(1))
+
+	// Prepare a dns message.
 	m := new(dns.Msg)
 	m.RecursionDesired = true
 	m.Question = make([]dns.Question, 1)
+
+	// Prepare a dns client.
 	c := new(dns.Client)
 	c.Net = "tcp-tls"
 	if *insecure {
 		c.TLSConfig = new(tls.Config)
 		c.TLSConfig.InsecureSkipVerify = true
 	}
+
+	// Set the dns question to ask.
 	m.Question[0] = dns.Question{zone, dns.TypeDNSKEY, dns.ClassINET}
 	m.Id = dns.Id()
+
 	in, rtt, err := c.Exchange(m, net.JoinHostPort(ns, "853"))
 	if err == nil && in != nil && len(in.Answer) > 0 {
 		fmt.Printf("(time %.3d µs) %d keys. TC=%v\n", rtt/1e3, len(in.Answer), in.Truncated)
